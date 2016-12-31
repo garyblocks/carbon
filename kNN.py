@@ -30,6 +30,7 @@ class build(object):
 		self.dataSet = trainSet.x
 		self.y = trainSet.y
 		self.label = trainSet.label
+		self.k = k
 		self.autoNorm()
 	
 	#Plot two features with class label
