@@ -6,10 +6,14 @@ class DataSet(object):
 		self.key = []			#name of the instances
 		self.x = zeros((1,1))	#data
 		self.y = []				#class
+		self.type = 'numeric'	#numeric or nominal data
 	
 	#Get the dimension of data
 	def dim(self):
-		return self.x.shape
+		if self.type == 'numeric':
+			return self.x.shape
+		else:
+			return (len(self.x),len(self.x[0]))
 
 	#Create a data set with a filename
 	#input filename
@@ -29,6 +33,16 @@ class DataSet(object):
 				self.x[index,:] = listFromLine[1:feat+1]
 				self.y.append(listFromLine[-1])
 				index += 1
+	
+	#Convert numerical data to nominal data
+	def num2nom(self):
+		row,col = self.dim()
+		new = [['' for j in range(col)] for i in range(row)]	#new data
+		for i in range(row):
+			for j in range(col):
+				new[i][j] = str(self.x[i][j])
+		self.x = new
+		self.type = 'nominal'
 
 #Use hold out to create train and test data
 #input DataSet object and ratio (int) of holdout

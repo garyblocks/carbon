@@ -64,7 +64,7 @@ class build(object):
 		for vote in classList:
 			if vote not in classCount.keys(): classCoun[vote] = 0
 			classCount[vote] += 1
-		sortedClassCount = sorted(classCount.iteritems(), key = operator.itemgetter(1), reverse = True)
+		sortedClassCount = sorted(classCount.items(), key = operator.itemgetter(1), reverse = True)
 		return sortedClassCount[0][0]
 
 	#Tree-building code
@@ -91,7 +91,8 @@ class build(object):
 	
 	#train the classifier
 	def train(self,trainSet):
-		x = trainSet.x.tolist()
+		import copy
+		x = copy.deepcopy(trainSet.x)
 		y = trainSet.y[:]
 		for i in range(len(x)):
 			x[i].append(y[i])
@@ -99,8 +100,26 @@ class build(object):
 		self.tree = self.createTree(x,labels)
 		self.label = trainSet.label
 	
+	#Plot the tree
+	def view(self):
+		import treePlotter
+		treePlotter.createPlot(self.tree)
+	
+	#count the frequecy of each label
+	def countLeaf(self, tree, dict):
+		firstStr = list(tree)[0]			#first feature
+		secondDict = tree[firstStr]
+		for key in secondDict:
+			if type(secondDict[key]).__name__=='dict':		#if another node, recurse
+				self.countLeaf(secondDict[key],dict)
+			elif secondDict[key] in dict:					#else count
+				dict[secondDict[key]] += 1
+			else: 
+				dict[secondDict[key]] = 1
+	
 	#Classification function for an existing decision tree
 	def classify0(self,inputTree,testVec):
+		classLabel = ''
 		firstStr = list(inputTree)[0]
 		secondDict = inputTree[firstStr]
 		featIndex = self.label.index(firstStr)	#Translate label string to index
@@ -109,6 +128,11 @@ class build(object):
 				if type(secondDict[key]).__name__=='dict':
 					classLabel = self.classify0(secondDict[key],testVec)
 				else: classLabel = secondDict[key]
+		if classLabel == '':			#if not in tree, vote for the majority leaf
+			leafCount = {}
+			self.countLeaf(inputTree,leafCount)		
+			sortedClassCount = sorted(leafCount.items(), key = operator.itemgetter(1), reverse = True)
+			classLabel = sortedClassCount[0][0]
 		return classLabel
 	
 	#Classify a new subject
@@ -123,7 +147,7 @@ class build(object):
 		res = []
 		#Classify the data and get the error rate
 		for i in range(m):
-			classifierResult = self.classify(testSet.x[i,:])
+			classifierResult = self.classify(testSet.x[i])
 			res.append(classifierResult)
 			if (classifierResult != testSet.y[i]): errorCount += 1.0
 		print("the total error rate is: %f" % (errorCount/float(m)))
