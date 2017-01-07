@@ -4,9 +4,11 @@ from numpy import *
 
 class build(object):
 	def __init__(self):
-		self.prob = {}		#probabilities
-		self.label = []		#feature labels
-		self.cls = set()		#class labels
+		self.probClass = {}			#probabilities for each class
+		self.probCond = {}			#conditional probabilities
+		self.probDef = -10.0 		#default probability for nonexist value
+		self.label = []				#feature labels
+		self.cls = set()			#class labels
 	
 	#train the classifier
 	def train(self,trainSet):
@@ -15,165 +17,73 @@ class build(object):
 		probClass = {}		#probability of each class
 		for i in self.cls:
 			probClass[i] = trainSet.y.count(i)/float(m)
-		probCond = [{} for i in range(n)]	#conditional probability of each feature value
+		self.probClass = probClass
+		probCond = {}	#conditional probabilities of each class
+		#count the conditional occurance
+		for i in range(m):
+			c = trainSet.y[i]
+			if c in probCond:
+				for j in range(n):
+					feat = probCond[c][j]	#a dictionary for each feature
+					value = trainSet.x[i][j]
+					if value in feat:
+						feat[value] += 1
+					else:
+						feat[value] = 1
+			else:
+				probCond[c] = [{} for _ in range(n)]	#create a list of dictionary
+				for j in range(n):
+					probCond[c][j][trainSet.x[i][j]] = 1
+		#calc the probabilities
+		for cls in probCond:
+			cnt = trainSet.y.count(cls)
+			for a in range(n):
+				feat = probCond[cls][a]
+				for value in feat:
+					feat[value] = log(feat[value]/float(cnt))	#save the log value
+		self.probCond = probCond
 
-def createVocabList(dataSet):
-	vocabSet = set([])	#create an empty set
-	for document in dataSet:
-		vocabSet = vocabSet | set(document)	#Create the union of two sets
-	return list(vocabSet)
+	#Naive Bayes classify function
+	#input: a vector to classify, 3 probabilities
+	def classify(self, inX):
+		maxProb,res = -inf,''
+		#calc p(class)*p(value|class) for each class
+		for c in self.cls:
+			tmp = log(self.probClass[c])	
+			for i in range(len(inX)):
+				feat = self.probCond[c][i]
+				if inX[i] in feat:		
+					tmp += feat[inX[i]]
+				else:
+					tmp += self.probDef
+			#save the biggest prob
+			if tmp > maxProb:	
+				maxProb = tmp
+				res = c[:]
+		return res
+		
+	#test on the test dataset
+	def test(self,testSet):
+		m = testSet.dim()[0]
+		errorCount = 0.0
+		res = []
+		#Classify the data and get the error rate
+		for i in range(m):
+			classifierResult = self.classify(testSet.x[i])
+			res.append(classifierResult)
+			if (classifierResult != testSet.y[i]): errorCount += 1.0
+		print("the total error rate is: %f" % (errorCount/float(m)))
+		return res
+		
+	#Save the model
+	def save(self,modelName):
+		import pickle
+		fw = open('models/'+modelName+'.nb','wb')
+		pickle.dump(self,fw)
+		fw.close()
 
-#Naive Bayes bag-of-words model
-def setOfWords2Vec(vocabList, inputSet):
-	returnVec = [0]*len(vocabList)	#Create a vector of all 0s
-	for word in inputSet:
-		if word in vocabList:
-			returnVec[vocabList.index(word)] += 1
-		else: print("the word: %s is not in my Vocabulary!" % word)
-	return returnVec
-
-#Naive Bayes classifier training function
-def trainNB0(trainMatrix,trainCategory):
-	numTrainDocs = len(trainMatrix)
-	numWords = len(trainMatrix[0])
-	pAbusive = sum(trainCategory)/float(numTrainDocs)
-#Initialize probabilities
-	p0Num = ones(numWords); p1Num = ones(numWords)	#at least one count
-	p0Denom = 2.0; p1Denom = 2.0	#can't be 0, has to be bigger than 1 
-	for i in range(numTrainDocs):
-		if trainCategory[i] == 1:
-#Vector addition
-			p1Num += trainMatrix[i]
-			p1Denom += sum(trainMatrix[i])
-		else:
-			p0Num += trainMatrix[i]
-			p0Denom += sum(trainMatrix[i])
-	p1Vect = log(p1Num/p1Denom)	#element-wise division
-	p0Vect = log(p0Num/p0Denom)	#use log() to avoid underflow 
-	return p0Vect,p1Vect,pAbusive
-
-#Naive Bayes classify function
-#input: a vector to classify, 3 probabilities
-def classifyNB(vec2Classify, p0Vec, p1Vec, pClass1):
-	p1 = sum(vec2Classify * p1Vec) + log(pClass1)	#element-wise multiplication
-	p2 = sum(vec2Classify * p0Vec) + log(1.0 - pClass1)
-	if p1 > p2:
-		return 1
-	else:
-		return 0
-
-def testingNB():
-	listOPosts,listClasses = loadDataSet()
-	myVocabList = createVocabList(listOPosts)
-	trainMat = []
-	for postinDoc in listOPosts:
-		trainMat.append(setOfWords2Vec(myVocabList, postinDoc))
-	p0V,p1V,pAb = trainNB0(array(trainMat),array(listClasses))
-	testEntry = ['love','my','dalmation']
-	thisDoc = array(setOfWords2Vec(myVocabList,testEntry))
-	print(testEntry,'classified as: ',classifyNB(thisDoc,p0V,p1V,pAb))
-	testEntry = ['stupid', 'garbage']
-	thisDoc = array(setOfWords2Vec(myVocabList, testEntry))
-	print(testEntry,'classified as: ', classifyNB(thisDoc,p0V,p1V,pAb))
-
-#File parsing and full spam test functions
-def textParse(bigString):
-	import re
-	listOfTokens = re.split(r'\W*',bigString)	#split the list with regular expression
-	return [tok.lower() for tok in listOfTokens if len(tok) > 2]	#use lowercase and only count word shorter than 2 letters
-
-def spamTest():
-	docList=[]; classList=[]; fullText=[]
-#Load and parse text files
-	for i in range(1,26):
-		wordList = textParse(open('email/spam/%d.txt' % i).read())
-		docList.append(wordList)
-		fullText.extend(wordList)
-		classList.append(1)
-		wordList = textParse(open('email/ham/%d.txt' % i).read())
-		docList.append(wordList)
-		fullText.extend(wordList)
-		classList.append(0)
-	vocabList = createVocabList(docList)
-	trainingSet = list(range(50)); testSet = []
-#Randomly create the training set
-	for i in range(10):
-		randIndex = int(random.uniform(0,len(trainingSet)))
-		testSet.append(trainingSet[randIndex])
-		del(trainingSet[randIndex])
-	trainMat = []; trainClasses = []
-	for docIndex in trainingSet:
-		trainMat.append(setOfWords2Vec(vocabList, docList[docIndex]))
-		trainClasses.append(classList[docIndex])
-	p0V,p1V,pSpam = trainNB0(array(trainMat),array(trainClasses))
-	errorCount = 0
-#Classify the test set
-	for docIndex in testSet:
-		wordVector = setOfWords2Vec(vocabList, docList[docIndex])
-		if classifyNB(array(wordVector),p0V,p1V,pSpam) != classList[docIndex]:
-			errorCount += 1
-	print('the error rate is: ',float(errorCount)/len(testSet))
-
-#RSS feed classifier and frequent word removal functions
-#Calculate frequency of occurence
-def calcMostFreq(vocabList,fullText):
-	import operator
-	freqDict = {}
-	for token in vocabList:
-		freqDict[token]=fullText.count(token)
-	sortedFreq = sorted(freqDict.iteritems(), key=operator.itemgetter(1),\
-			reverse=True)
-	return sortedFreq[:30]
-
-def localWords(feed1,feed0):
-	import feedparser
-	docList=[]; classList = []; fullText = []
-	minLen = min(len(feed1['entries']),len(feed0['entries']))
-	for i in range(minLen):
-		wordList = textParse(feed1['entries'][i]['summary']) #accesses one feed at a time
-		docList.append(wordList)
-		fullText.extend(wordList)
-		classList.append(1)
-		wordList = textParse(feed0['entries'][i]['summary'])
-		docList.append(wordList)
-		fullText.extend(wordList)
-		classList.append(0)
-	vocaLsit = createVocabList(docList)
-	top30Words = calcMostFreq(vocabList,fullText)
-#Remove most frequently occurring words
-	for pairW in top30Words:
-		if pairW[0] in vocabList: vocabList.remove(pairW[0])
-	trainingSet = range(2*minLen); testSet = []
-	for i in range(20):
-		randIndex = int(random.uniform(0,len(trainingSet)))
-		testSet.append(trainingSet[randIndex])
-		del(trainingSet[randIndex])
-	trainMat = []; trainClasses = []
-	for docIndex in trainingSet:
-		trainMat.append(bagOfWords2VecMN(vocabList, docList[docIndex]))
-		trainClasses.append(classList[docIndex])
-	p0V,p1V,pSpam = trainNB0(array(trainMat),array(trainClasses))
-	errorCount = 0
-	for docIndex in testSet:
-		wordVector = bagOfWords2VecMN(vocabList,docList[docIndex])
-		if classifyNB(array(wordVector),p0V,p1V,pSpam) != \
-				classList[docIndex]:
-			errorCount += 1
-	print('the error rate is: ',float(errorCount)/len(testSet))
-	return vocabList,p0V,p1V
-
-def getTopWords(ny,sf):
-	import operator
-	vocabList,p0V,p1V=localWords(ny,sf)
-	topNY = []; topSF=[]
-	for i in range(len(p0V)):
-		if p0V[i] > -6.0: topSF.append((vocabList[i],p0V[i]))
-		if p1V[i] > -6.0: topNY.append((vocabList[i],p1V[i]))
-	sortedSF = sorted(topSF, key=lambda pair:pair[1], reverse=True)
-	print("SF**SF**SF**SF**SF**SF**SF**SF**SF**SF**SF**SF**SF**SF**")
-	for item in sortedSF:
-		print item[0]
-	sortedNY = sorted(topNY, key=lambda pair: pair[1], reverse=True)
-	print("NY**NY**NY**NY**NY**NY**NY**NY**NY**NY**NY**NY**NY**NY **")
-	for item in sortedNY:
-		print(item[0])
+#Grab the model
+def load(modelName):
+	import pickle
+	fr = open('models/'+modelName+'.nb','rb')
+	return pickle.load(fr)
