@@ -47,3 +47,50 @@ def scatter(x,y,v=None,sizeDf=0,xlab='X1',ylab='X2'):
 	else:
 		ax.scatter(x,y)
 	plt.show()
+
+# histgram plot
+#input a dictionary of dictionary for a feature, each sub dictionary is a class
+#featName is the name of current feature
+def hist(dict,featName):
+	# find the number of distinct values
+	tmp = set()
+	for i in dict:
+		tmp |= set(dict[i].keys())
+	distinct = sorted(list(tmp))	#sort the values
+	N = len(distinct)
+	ind = arange(N)				# the x locations for the values
+	width = 1.0/(N+0.5)      				# the width of the bars	
+	fig, ax = plt.subplots()
+	cmap = plt.cm.YlOrRd		# set color map
+	bars = []		#a bar plot for each class
+	classes = []	#class names
+	i = 0			#index
+	for cls in dict:
+		probs = []
+		for value in distinct:
+			if value in dict[cls]:
+				probs.append(exp(dict[cls][value]))
+			else:
+				probs.append(0)
+		rect = ax.bar(ind+i*width, probs, width, color=cmap(i*int(cmap.N/(N-1.0)-1)))
+		bars.append(rect)
+		classes.append(cls)
+		i += 1
+	# add some text for labels, title and axes ticks
+	ax.set_xlabel(featName)
+	ax.set_ylabel('Conditional Probability')
+	ax.set_title('Conditional Probabilities of '+featName)
+	ax.set_xticks(ind + width)
+	ax.set_xticklabels((distinct))
+	def autolabel(rects):
+		# attach some text labels
+		for rect in rects:
+			height = rect.get_height()
+			ax.text(rect.get_x() + rect.get_width()/2., 0.005+height,\
+					'%0.3f' % height, ha='center', va='bottom')
+	legColor = []		#class color for legends
+	for i in bars:
+		autolabel(i)
+		legColor.append(i[0])
+	ax.legend(legColor, classes)		#add legends
+	plt.show()

@@ -42,7 +42,17 @@ class build(object):
 				for value in feat:
 					feat[value] = log(feat[value]/float(cnt))	#save the log value
 		self.probCond = probCond
-
+		self.label = trainSet.label
+	
+	#Plot two features with class label
+	def view(self,featName):
+		import plot
+		i = self.label.index(featName)		#index of the feature
+		dict = {} 
+		for c in self.cls:
+			dict[c] = self.probCond[c][i]	#get the feature values
+		plot.hist(dict,featName)
+		
 	#Naive Bayes classify function
 	#input: a vector to classify, 3 probabilities
 	def classify(self, inX):
