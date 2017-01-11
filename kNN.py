@@ -42,7 +42,6 @@ class build(object):
 
 	#inputs
 	#inX: Input vector to classify
-	#y: A vector of class y
 	#k: Number of nearest neighbors to use in the voting
 	def classify(self,inX):
 		dataSetSize = self.dataSet.shape[0]

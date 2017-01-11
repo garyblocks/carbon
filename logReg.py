@@ -5,37 +5,83 @@ from numpy import *
 class build(object):
 	def __init__(self):
 		self.weights = []	#learned weights
-		self.cls = {}		#class labels mapping
 		self.label = []		#feature names
+		self.classList = []	#class labels
 
 	#Train the model
+	#method is algorithm used for grad ascent,default is SGD
+	#numIter is the maximum number of iteration
 	def train(self,trainSet,method = 'SGD',numIter = 500):
-		self.cls = set(trainSet.y)
-		classList = list(self.cls)
+		classNames = set(trainSet.y)
+		self.classList = list(classNames)
 		classLabels = []
 		for i in trainSet.y:
-			if i==classList[0]:
+			if i==self.classList[0]:
 				classLabels.append(0)
 			else:
 				classLabels.append(1)
-		if method == 'SGD':
+		#if method is 'SGD', use stochastic gradient ascent
+		if method == 'SGD':	
 			self.stocGradAscent(trainSet.x, classLabels, numIter)
+		#if method is 'GD', use regular gradient ascent
 		elif method == 'GD':
 			self.gradAscent(trainSet.x, classLabels, numIter)
 		else: raise NameError('The method name is not recognized')
+		self.label = trainSet.label
 	
 	#Plot two features with class label
-	#def view(self,feat1,feat2):
+	#Use a dataSet to show the model
+	def view(self,feat1,feat2,dataSet):
+		import matplotlib.pyplot as plt
+		weights = self.weights.getA()
+		dataMat,labelMat = dataSet.x,[]
+		for i in dataSet.y:
+			if i==self.classList[0]:
+				labelMat.append(0)
+			else:
+				labelMat.append(1)
+		#index of the feature
+		i1,i2 = self.label.index(feat1),self.label.index(feat2)	
+		dataArr = array(dataMat)
+		n = dataSet.dim()[0]
+		xcord1,ycord1 = [],[]
+		xcord2,ycord2 = [],[]
+		for i in range(n):
+			if int(labelMat[i])==1:
+				xcord1.append(dataArr[i,i1]);ycord1.append(dataArr[i,i2])
+			else:
+				xcord2.append(dataArr[i,i1]);ycord2.append(dataArr[i,i2])
+		fig = plt.figure()
+		ax = fig.add_subplot(111)
+		ax.scatter(xcord1, ycord1, s=60, c='red', marker='s')
+		ax.scatter(xcord2, ycord2, s=30, c='green')
+		x = arange(min(dataArr[:,i1]),max(dataArr[:,i1]), 0.1)
+		y = (-weights[i1]*x)/weights[i2]	#Best-fit line when input to sigmoid is 0
+		ax.plot(x,y)
+		plt.xlabel(feat1); plt.ylabel(feat2);
+		plt.show()
 
+	#Logistic regression classification function
+	#Calc the sigmoid		
 	#inputs
 	#inX: Input vector to classify
-	#y: A vector of class y
-	#k: Number of nearest neighbors to use in the voting
-	#def classify(self,inX):
-
+	def classify(self,inX):
+		prob = self.sigmoid(sum(inX*self.weights))
+		if prob > 0.5: return self.classList[1]
+		else: return self.classList[1]
+		
 	#test the dataset with the model 
-	#def test(self,testSet):
-
+	def test(self,testSet):
+		m = testSet.dim()[0]
+		errorCount = 0.0
+		res = []
+		#Classify the data and get the error rate
+		for i in range(m):
+			classifierResult = self.classify(testSet.x[i])
+			res.append(classifierResult)
+			if (classifierResult != testSet.y[i]): errorCount += 1.0
+		print("the total error rate is: %f" % (errorCount/float(m)))
+		return res
 
 	#Save the model
 	def save(self,modelName):
@@ -80,36 +126,3 @@ def load(modelName):
 	import pickle
 	fr = open('models/'+modelName+'.logreg','rb')
 	return pickle.load(fr)
-
-#Plotting the logistic regression best-fit line and dataset
-def plotBestFit(wei):
-	import matplotlib.pyplot as plt
-	weights = wei.getA()
-	dataMat,labelMat=loadDataSet()
-	dataArr = array(dataMat)
-	n = shape(dataArr)[0]
-	xcord1 = []; ycord1 = []
-	xcord2 = []; ycord2 = []
-	for i in range(n):
-		if int(labelMat[i])==1:
-			xcord1.append(dataArr[i,1]);ycord1.append(dataArr[i,2])
-		else:
-			xcord2.append(dataArr[i,1]);ycord2.append(dataArr[i,2])
-	fig = plt.figure()
-	ax = fig.add_subplot(111)
-	ax.scatter(xcord1, ycord1, s=30, c='red', marker='s')
-	ax.scatter(xcord2, ycord2, s=30, c='green')
-	x = arange(-3.0, 3.0, 0.1)
-	y = (-weights[0]-weights[1]*x)/weights[2]	#Best-fit line when input to sigmoid is 0
-	ax.plot(x,y)
-	plt.xlabel('X1'); plt.ylabel('X2');
-	plt.show()
-
-
-
-#Logistic regression classification function
-#Calc the sigmoid
-def classifyVector(inX,weights):
-	prob = sigmoid(sum(inX*weights))
-	if prob > 0.5: return 1.0
-	else: return 0.0
