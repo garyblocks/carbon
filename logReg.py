@@ -20,12 +20,13 @@ class build(object):
 				classLabels.append(0)
 			else:
 				classLabels.append(1)
+		x = c_[ones(trainSet.dim()[0]), trainSet.x]	# add a column of 1 to the matrix
 		#if method is 'SGD', use stochastic gradient ascent
 		if method == 'SGD':	
-			self.stocGradAscent(trainSet.x, classLabels, numIter)
+			self.stocGradAscent(x, classLabels, numIter)
 		#if method is 'GD', use regular gradient ascent
 		elif method == 'GD':
-			self.gradAscent(trainSet.x, classLabels, numIter)
+			self.gradAscent(x, classLabels, numIter)
 		else: raise NameError('The method name is not recognized')
 		self.label = trainSet.label
 	
@@ -55,10 +56,15 @@ class build(object):
 		ax = fig.add_subplot(111)
 		ax.scatter(xcord1, ycord1, s=60, c='red', marker='s')
 		ax.scatter(xcord2, ycord2, s=30, c='green')
+		means = concatenate((ones(1),dataSet.x.mean(0)))			# get the means
 		x = arange(min(dataArr[:,i1]),max(dataArr[:,i1]), 0.1)
-		y = (-weights[i1]*x)/weights[i2]	#Best-fit line when input to sigmoid is 0
+		W = means * self.weights - \
+			self.weights[i1]*means[i1]-self.weights[i2]*means[i2]
+		y = ((-W-weights[i1]*x)/weights[i2]).A1	#Best-fit line when input to sigmoid is 0
 		ax.plot(x,y)
 		plt.xlabel(feat1); plt.ylabel(feat2);
+		axes = plt.gca()
+		axes.set_ylim([min(dataArr[:,i2])-1,max(dataArr[:,i2])+1])		# set ylim
 		plt.show()
 
 	#Logistic regression classification function
@@ -66,9 +72,9 @@ class build(object):
 	#inputs
 	#inX: Input vector to classify
 	def classify(self,inX):
-		prob = self.sigmoid(sum(inX*self.weights))
+		prob = self.sigmoid(([1]+inX)*self.weights)
 		if prob > 0.5: return self.classList[1]
-		else: return self.classList[1]
+		else: return self.classList[0]
 		
 	#test the dataset with the model 
 	def test(self,testSet):
@@ -77,7 +83,7 @@ class build(object):
 		res = []
 		#Classify the data and get the error rate
 		for i in range(m):
-			classifierResult = self.classify(testSet.x[i])
+			classifierResult = self.classify(list(testSet.x[i]))
 			res.append(classifierResult)
 			if (classifierResult != testSet.y[i]): errorCount += 1.0
 		print("the total error rate is: %f" % (errorCount/float(m)))
