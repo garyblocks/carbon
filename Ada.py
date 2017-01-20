@@ -42,16 +42,24 @@ class build(object):
 			print("total error: ",errorRate,"\n")
 			if errorRate == 0.0: break
 	
-	#Plot two features with class label
-	def view(self,feat1,feat2):
-		import plot
-		x = self.dataSet[:,self.label.index(feat1)]
-		y = self.dataSet[:,self.label.index(feat2)]
-		plot.scatter(x,y,self.y,50,feat1,feat2)
+	# Plot two features with class label
+	def view(self,feat1,feat2,trainSet):
+		import plotAda
+		# get the values of these 2 features from trainSet
+		a = trainSet.x[:,self.label.index(feat1)]
+		b = trainSet.x[:,self.label.index(feat2)]
+		# save the colors of the 2 classes
+		c = []
+		for i in trainSet.y:
+			if self.cls[i]<0:
+				c.append('green')
+			else:
+				c.append('blue')
+		# plot the model
+		plotAda.create(self.weakClassArr,a,b,c,feat1,feat2)
 
-	#inputs
-	#inX: Input vector to classify
-	#k: Number of nearest neighbors to use in the voting
+	# classify a new instance
+	# inX: Input vector to classify
 	def classify(self,inX):
 		dataVec = mat(inX)
 		aggClassEst = 0
