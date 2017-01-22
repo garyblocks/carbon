@@ -1,4 +1,6 @@
 #!/usr/bin/python
+# This file is used to read data into python and do some preliminary processing
+# 
 from numpy import *
 class DataSet(object):
 	def __init__(self):
@@ -16,24 +18,39 @@ class DataSet(object):
 			return (len(self.x),len(self.x[0]))
 
 	#Create a data set with a filename
-	#input filename
+	#input filename and data type, default is numeric
 	#return DataSet object
-	def read(self,filename):
+	def read(self,filename,type = 'numeric'):
+		# open the file
 		with open(filename) as infile:
+			# read all lines
 			raw = infile.readlines()
-			names = raw[0].strip().split(',')
-			self.label = names[1:len(names)-1]
-			line = len(raw)-1			#number of lines
-			feat = len(self.label)		#number of features
-			self.x = zeros((line,feat))	#read data
-			index = 0
-			for line in raw[1:]:
-				listFromLine = line.strip().split(',')
-				self.key.append(listFromLine[0])
-				self.x[index,:] = listFromLine[1:feat+1]
-				self.y.append(listFromLine[-1])
-				index += 1
-	
+			# get the feature names
+			featNames = raw[0].strip().split(',')
+			self.label = featNames[1:len(featNames)-1]
+			numOfLine = len(raw)-1			#number of lines
+			numOfFeat = len(self.label)		#number of features
+			# if the data type is numeric
+			if type == 'numeric':
+				self.type = 'numeric'
+				self.x = zeros((numOfLine,numOfFeat))	#read data
+				index = 0
+				for line in raw[1:]:
+					listFromLine = line.strip().split(',')
+					self.key.append(listFromLine[0])
+					self.x[index,:] = listFromLine[1:numOfFeat+1]
+					self.y.append(listFromLine[-1])
+					index += 1
+			# if the data type is nominal
+			else:
+				self.type = 'nominal'
+				self.x = []		#reset x
+				for line in raw[1:]:
+					listFromLine = line.strip().split(',')
+					self.key.append(listFromLine[0])
+					self.x.append(listFromLine[1:numOfFeat+1])
+					self.y.append(listFromLine[-1])
+				
 	#Convert numerical data to nominal data
 	def num2nom(self):
 		row,col = self.dim()
