@@ -6,20 +6,31 @@ from os import listdir
 class build(object):
 	def __init__(self):
 		self.label = []					# feature names
-		self.weights = []				# weights for each feature
 		self.method = ''				# type of regression
 		self.cls = []					# name of classes
+		# 'linear'
+		self.weights = []				# weights for each feature
+		# 'lwlr'
+		self.k = 1.0					# k is how quickly the decay for lwlr
+		self.x = []						# train dataSet
+		self.y = []						# train class labels
 
-	# Train the model with train data, choose a method from 'linear','lasso' and 'weighted'
-	def train(self,trainSet,method = 'linear'):
+	# Train the model with train data, choose a method from 'linear','lwlr'
+	def train(self,trainSet,method = 'linear',k = 1.0):
 		# converse y to continuous
 		y = []
+		self.cls = set(trainSet.y)
 		for i in trainSet.y:
 			y.append(float(i))
-			self.cls.append(i)
 		self.label = trainSet.label
 		if method=='linear':
+			self.method = 'linear'
 			self.linReg(trainSet.x,y)
+		elif method=='lwlr':
+			self.method = 'lwlr'
+			self.k = k
+			self.x = trainSet.x; self.y = y
+			
 	
 	#Plot two features with class label
 	def view(self,feat1,feat2):
@@ -33,12 +44,15 @@ class build(object):
 	def classify(self,inX):
 		vec = mat(inX)
 		# predict value
-		yHat = vec*self.weights
+		if self.method == 'linear':
+			yHat = float(vec*self.weights)
+		elif self.method == 'lwlr':
+			yHat = float(self.lwlr(mat(inX)))
 		# find the closest class
 		cls,err = '',inf
 		for i in self.cls:
-			if float(i)-yHat < err:
-				err = float(i)-yHat
+			if abs(float(i)-yHat) < err:
+				err = abs(float(i)-yHat)
 				cls = i
 		return cls
 
@@ -76,6 +90,23 @@ class build(object):
 		# calculate the correlations
 		cor = corrcoef(yHat.T, yMat.T)
 		print(cor[1,0])
+	
+	# Locally weighted linear regression function
+	def lwlr(self, testPoint):
+		xMat = mat(self.x); yMat = mat(self.y).T
+		m = shape(xMat)[0]
+		# Create diagonal matrix
+		weights = mat(eye((m)))
+		# Populate weights with exponentially decaying values
+		for j in range(m):
+			diffMat = testPoint - xMat[j,:]
+			weights[j,j] = exp(diffMat*diffMat.T/(-2.0*self.k**2))
+		xTx = xMat.T * (weights * xMat)
+		if linalg.det(xTx) == 0.0:
+			print("This matrix is singular, cannot do inverse")
+			return 
+		ws = xTx.I * (xMat.T * (weights * yMat))
+		return testPoint * ws
 
 #Grab the model
 def load(modelName):
@@ -97,32 +128,6 @@ def plot(xArr,yArr):
 	yHat=xCopy*ws
 	ax.plot(xCopy[:,1],yHat)
 	plt.show()
-
-# Locally weighted linear regression function
-# k is how quickly the decay
-def lwlr(testPoint, xArr, yArr, k=1.0):
-	xMat = mat(xArr); yMat = mat(yArr).T
-	m = shape(xMat)[0]
-	# Create diagonal matrix
-	weights = mat(eye((m)))
-	#Populate weights with exponentially decaying values
-	for j in range(m):
-		diffMat = testPoint - xMat[j,:]
-		weights[j,j] = exp(diffMat*diffMat.T/(-2.0*k**2))
-	xTx = xMat.T * (weights * xMat)
-	if linalg.det(xTx) == 0.0:
-		print("This matrix is singular, cannot do inverse")
-		return 
-	ws = xTx.I * (xMat.T * (weights * yMat))
-	return testPoint * ws
-
-# call lwlr for every points
-def lwlrTest(testArr, xArr, yArr, k=1.0):
-	m = shape(testArr)[0]
-	yHat = zeros(m)
-	for i in range(m):
-		yHat[i] = lwlr(testArr[i],xArr,yArr,k)
-	return yHat
 
 def plot2(xArr,yHat):
 	srtInd = xMat[:,1].argsort(0)
