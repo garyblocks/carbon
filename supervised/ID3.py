@@ -104,7 +104,7 @@ class build(object):
 	
 	#Plot the tree
 	def view(self):
-		import plotID3
+		from supervised import plotID3
 		plotID3.createPlot(self.tree)
 	
 	#count the frequecy of each label
