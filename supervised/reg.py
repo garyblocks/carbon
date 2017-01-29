@@ -8,15 +8,20 @@ class build(object):
 		self.label = []					# feature names
 		self.method = ''				# type of regression
 		self.cls = []					# name of classes
-		# 'linear'
+		# 'linear'/'ridge'
 		self.weights = []				# weights for each feature
 		# 'lwlr'
 		self.k = 1.0					# k is how quickly the decay for lwlr
 		self.x = []						# train dataSet
 		self.y = []						# train class labels
+		# 'ridge'
+		self.lam = 0.2					# lamda as ridge	
+		self.xmean = []					# mean of x
+		self.ymean = []					# mean of y
+		self.xvar = []					# variance of x
 
-	# Train the model with train data, choose a method from 'linear','lwlr'
-	def train(self,trainSet,method = 'linear',k = 1.0):
+	# Train the model with train data, choose a method from 'linear','lwlr','ridge'
+	def train(self,trainSet,method = 'linear',k = 1.0,l = 0.2):
 		# converse y to continuous
 		y = []
 		self.cls = set(trainSet.y)
@@ -30,6 +35,10 @@ class build(object):
 			self.method = 'lwlr'
 			self.k = k
 			self.x = trainSet.x; self.y = y
+		elif method=='ridge':
+			self.method = 'ridge'
+			self.lam = l
+			self.ridgeReg(trainSet.x,y)
 			
 	
 	#Plot two features with class label
@@ -48,6 +57,10 @@ class build(object):
 			yHat = float(vec*self.weights)
 		elif self.method == 'lwlr':
 			yHat = float(self.lwlr(mat(inX)))
+		elif self.method == 'ridge':
+			# return to original scale
+			vec = (vec-self.xmean)/self.var
+			yHat = float(vec*self.weights)+self.ymean
 		# find the closest class
 		cls,err = '',inf
 		for i in self.cls:
@@ -107,6 +120,24 @@ class build(object):
 			return 
 		ws = xTx.I * (xMat.T * (weights * yMat))
 		return testPoint * ws
+	
+	# Ridge regression
+	def ridgeReg(self, xArr, yArr):
+		# load x,y, convert to matrix
+		xMat = mat(xArr); yMat = mat(yArr).T
+		# Normalization
+		yMean = mean(yMat,0)
+		yMat = yMat - yMean
+		xMeans = mean(xMat,0)
+		xVar = var(xMat,0)
+		self.ymean,self.xmean,self.var = yMean,xMeans,xVar
+		xMat = (xMat - xMeans)/xVar
+		xTx = xMat.T*xMat
+		denom = xTx + eye(shape(xMat)[1])*self.lam
+		if linalg.det(denom) == 0.0:
+			print("This matrix is singular, cannot do inverse")
+			return 
+		self.weights = denom.I * (xMat.T*yMat)
 
 #Grab the model
 def load(modelName):
@@ -141,31 +172,6 @@ def plot2(xArr,yHat):
 
 def rssError(yArr,yHatArr):
 	return ((yArr-yHatArr)**2).sum()
-
-# Ridge regression
-def ridgeRegres(xMat, yMat, lam=0.2):
-	xTx = xMat.T*xMat
-	denom = xTx + eye(shape(xMat)[1])*lam
-	if linalg.det(denom) == 0.0:
-		print("This matrix is singular, cannot do inverse")
-		return 
-	ws = denom.I * (xMat.T*yMat)
-	return ws
-
-def ridgeTest(xArr, yArr):
-	xMat = mat(xArr); yMat = mat(yArr).T
-	# Normalization code
-	yMean = mean(yMat,0)
-	yMat = yMat - yMean
-	xMeans = mean(xMat,0)
-	xVar = var(xMat,0)
-	xMat = (xMat - xMeans)/xVar
-	numTestPts = 30
-	wMat = zeros((numTestPts,shape(xMat)[1]))
-	for i in range(numTestPts):
-		ws = ridgeRegres(xMat,yMat,exp(i-10))
-		wMat[i,:]=ws.T
-	return wMat
 
 # Forward stagewise linear regression
 def stageWise(xArr, yArr, eps=0.01,numIt=100):
