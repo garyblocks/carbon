@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# Jiayu Wang
 from numpy import *
 import operator
 from os import listdir
@@ -8,7 +9,7 @@ class build(object):
 		self.label = []					# feature names
 		self.method = ''				# type of regression
 		self.cls = []					# name of classes
-		# 'linear'/'ridge'
+		# 'linear'/'ridge'/'lasso'
 		self.weights = []				# weights for each feature
 		# 'lwlr'
 		self.k = 1.0					# k is how quickly the decay for lwlr
@@ -19,9 +20,12 @@ class build(object):
 		self.xmean = []					# mean of x
 		self.ymean = []					# mean of y
 		self.xvar = []					# variance of x
+		# 'lasso'
+		self.eps=0.01					# learning rate
+		self.numIt=100					# max number of iteration
 
-	# Train the model with train data, choose a method from 'linear','lwlr','ridge'
-	def train(self,trainSet,method = 'linear',k = 1.0,l = 0.2):
+	# Train the model with train data, choose a method from 'linear','lwlr','ridge','lasso'
+	def train(self,trainSet,method = 'linear',k = 1.0,l = 0.2,eps=0.01,numIt=100):
 		# converse y to continuous
 		y = []
 		self.cls = set(trainSet.y)
@@ -39,14 +43,27 @@ class build(object):
 			self.method = 'ridge'
 			self.lam = l
 			self.ridgeReg(trainSet.x,y)
+		elif method=='lasso':
+			self.method = 'lasso'
+			self.eps = eps
+			self.numIt = numIt
+			self.stageWise(trainSet.x,y)
 			
 	
 	#Plot two features with class label
-	def view(self,feat1,feat2):
-		import plot
-		x = self.dataSet[:,self.label.index(feat1)]
-		y = self.dataSet[:,self.label.index(feat2)]
-		plot.scatter(x,y,self.y,50,feat1,feat2)
+	def view(self,feat1,dataSet):
+		import matplotlib.pyplot as plt
+		index = self.label.index(feat1)
+		xMat=mat(dataSet.x[:,index])
+		yMat=mat(dataSet.y)
+		fig = plt.figure()
+		ax = fig.add_subplot(111)
+		ax.scatter(xMat, yMat)
+		xCopy = dataSet.x.copy()
+		xSort=xCopy[xCopy[:,index].argsort()]
+		yHat=mat(xCopy)*self.weights
+		ax.plot(xCopy[:,index],yHat,alpha=0.5,color='grey')
+		plt.show()
 
 	#inputs
 	#inX: Input vector to classify
@@ -58,6 +75,10 @@ class build(object):
 		elif self.method == 'lwlr':
 			yHat = float(self.lwlr(mat(inX)))
 		elif self.method == 'ridge':
+			# return to original scale
+			vec = (vec-self.xmean)/self.var
+			yHat = float(vec*self.weights)+self.ymean
+		elif self.method == 'lasso':
 			# return to original scale
 			vec = (vec-self.xmean)/self.var
 			yHat = float(vec*self.weights)+self.ymean
@@ -85,7 +106,7 @@ class build(object):
 	#Save the model
 	def save(self,modelName):
 		import pickle
-		fw = open('models/'+modelName+'.knn','wb')
+		fw = open('models/'+modelName+'.reg','wb')
 		pickle.dump(self,fw)
 		fw.close()
 	
@@ -138,11 +159,43 @@ class build(object):
 			print("This matrix is singular, cannot do inverse")
 			return 
 		self.weights = denom.I * (xMat.T*yMat)
+	
+	# Calculate rssError
+	def rssError(self,yArr,yHatArr):
+		return ((yArr-yHatArr)**2).sum()
+
+	# Forward stagewise linear regression
+	def stageWise(self, xArr, yArr):
+		# load x,y, convert to matrix
+		xMat = mat(xArr); yMat = mat(yArr).T
+		# Normalization
+		yMean = mean(yMat,0)
+		yHat = yMat - yMean
+		xMeans = mean(xMat,0)
+		xVar = var(xMat,0)
+		self.ymean,self.xmean,self.var = yMean,xMeans,xVar
+		xMat = (xMat - xMeans)/xVar
+		m,n = shape(xMat)
+		ws = zeros((n,1)); wsTest = ws.copy(); wsMax = ws.copy()
+		for i in range(self.numIt):
+			print(ws.T)
+			lowestError = inf;
+			for j in range(n):
+				for sign in [-1,1]:
+					wsTest = ws.copy()
+					wsTest[j] += self.eps*sign
+					yTest = xMat*wsTest
+					rssE = self.rssError(yMat.A, yTest.A)
+					if rssE < lowestError:
+						lowestError = rssE
+						wsMax = wsTest
+			ws = wsMax.copy()
+		self.weights=ws
 
 #Grab the model
 def load(modelName):
 	import pickle
-	fr = open('models/'+modelName+'.knn','rb')
+	fr = open('models/'+modelName+'.reg','rb')
 	return pickle.load(fr)
 
 # plot the model
@@ -168,36 +221,5 @@ def plot2(xArr,yHat):
 	ax.plot(xSort[:,1],yHat[srtInd])
 	ax.scatter(xMat[:,1].flatten().A[0], mat(yArr).T.flatten().A[0] , s=2,
 			c='red')
-	plt.show()
-
-def rssError(yArr,yHatArr):
-	return ((yArr-yHatArr)**2).sum()
-
-# Forward stagewise linear regression
-def stageWise(xArr, yArr, eps=0.01,numIt=100):
-	xMat = mat(xArr); yMat = mat(yArr).T
-	yMean = mean(yMat,0)
-	yHat = yMat - yMean
-	xMeans = mean(xMat,0)
-	xVar = var(xMat,0)
-	xMat = (xMat - xMeans)/xVar
-	numTestPts = 30
-	m,n = shape(xMat)
-	ws = zeros((n,1)); wsTest = ws.copy(); wsMax = ws.copy()
-	returnMat = zeros((numIt,n))
-	for i in range(numIt):
-		print(ws.T)
-		lowestError = inf;
-		for j in range(n):
-			for sign in [-1,1]:
-				wsTest = ws.copy()
-				wsTest[j] += eps*sign
-				yTest = xMat*wsTest
-				rssE = rssError(yMat.A, yTest.A)
-				if rssE < lowestError:
-					lowestError = rssE
-					wsMax = wsTest
-		ws = wsMax.copy()
-		returnMat[i,:]=ws.T
-	return returnMat 
+	plt.show() 
 
