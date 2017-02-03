@@ -5,16 +5,19 @@ from numpy import *
 
 class build(object):
 	def __init__(self):
-		self.probClass = {}			#probabilities for each class
-		self.probCond = {}			#conditional probabilities
-		self.probDef = -10.0 		#default log probability for nonexist value
-		self.label = []				#feature labels
-		self.cls = set()			#class labels
+		self.probClass = {}			# probabilities for each class
+		self.probCond = {}			# conditional probabilities
+		self.probDef = -10.0 		# default log probability for nonexist value
+		self.label = []				# feature labels
+		self.cls = set()			# class labels
+		self.mainclass = ''			# mainclass of naive bayes
 	
 	# train the classifier
 	def train(self,trainSet):
 		m,n = trainSet.dim()
 		self.cls = set(trainSet.y)
+		# default mainclass is the first class appeared
+		self.mainclass = trainSet.y[0]	
 		probClass = {}		# probability of each class
 		for i in self.cls:
 			probClass[i] = trainSet.y.count(i)/float(m)
@@ -59,34 +62,38 @@ class build(object):
 	#Naive Bayes classify function
 	#input: a vector to classify, 3 probabilities
 	def classify(self, inX):
-		maxProb,res = -inf,''
+		maxProb,res = -inf,['',0]
 		#calc p(class)*p(value|class) for each class
 		for c in self.cls:
-			tmp = log(self.probClass[c])	
+			tmp = log(self.probClass[c])
 			for i in range(len(inX)):
 				feat = self.probCond[c][i]
 				if inX[i] in feat:		
 					tmp += feat[inX[i]]
 				else:
 					tmp += self.probDef
+			# return the probability of mainclass
+			if c==self.mainclass:
+				res[1] = tmp
 			#save the biggest prob
 			if tmp > maxProb:	
 				maxProb = tmp
-				res = c[:]
+				res[0] = c[:]
 		return res
 		
 	#test on the test dataset
 	def test(self,testSet):
 		m = testSet.dim()[0]
 		errorCount = 0.0
-		res = []
+		res,val = [],[]
 		#Classify the data and get the error rate
 		for i in range(m):
-			classifierResult = self.classify(testSet.x[i])
+			classifierResult, predValue = self.classify(testSet.x[i])
 			res.append(classifierResult)
+			val.append(predValue)
 			if (classifierResult != testSet.y[i]): errorCount += 1.0
 		print("the total error rate is: %f" % (errorCount/float(m)))
-		return res
+		return res,val
 		
 	#Save the model
 	def save(self,modelName):
