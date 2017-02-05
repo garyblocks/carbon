@@ -58,11 +58,25 @@ class build(object):
 		yMat=mat(dataSet.y)
 		fig = plt.figure()
 		ax = fig.add_subplot(111)
+		# plot datapoints
 		ax.scatter(xMat, yMat)
+		# get x values
 		xCopy = dataSet.x.copy()
-		xSort=xCopy[xCopy[:,index].argsort()]
-		yHat=mat(xCopy)*self.weights
-		ax.plot(xCopy[:,index],yHat,alpha=0.5,color='grey')
+		xSort = xCopy[xCopy[:,index].argsort()]
+		# get yHat
+		if self.method=='linear':
+			yHat=mat(xSort)*self.weights
+		elif self.method=='lwlr':
+			yHat=[]
+			for i in range(len(xSort)):
+				yHat.append(float(self.lwlr(xSort[i])))
+		elif self.method=='ridge':
+			tmp = (xSort-self.xmean)/self.var
+			yHat = mat(tmp)*self.weights+self.ymean
+		elif self.method == 'lasso':
+			tmp = (xSort-self.xmean)/self.var
+			yHat = mat(tmp)*self.weights+self.ymean
+		ax.plot(xSort,yHat,alpha=0.5,color='grey')
 		plt.show()
 
 	#inputs
@@ -197,29 +211,4 @@ def load(modelName):
 	import pickle
 	fr = open('models/'+modelName+'.reg','rb')
 	return pickle.load(fr)
-
-# plot the model
-def plot(xArr,yArr):
-	import matplotlib.pyplot as plt
-	xMat=mat(xArr)
-	yMat=mat(yArr)
-	ws = regression.standRegres(xArr,yArr)
-	fig = plt.figure()
-	ax = fig.add_subplot(111)
-	ax.scatter(xMat[:,1].flatten().A[0], yMat.T[:,0].flatten().A[0])
-	xCopy=xMat.copy()
-	xCopy.sort(0)
-	yHat=xCopy*ws
-	ax.plot(xCopy[:,1],yHat)
-	plt.show()
-
-def plot2(xArr,yHat):
-	srtInd = xMat[:,1].argsort(0)
-	xSort=xMat[srtInd][:,0,:]
-	fig = plt.figure()
-	ax = fig.add_subplot(111)
-	ax.plot(xSort[:,1],yHat[srtInd])
-	ax.scatter(xMat[:,1].flatten().A[0], mat(yArr).T.flatten().A[0] , s=2,
-			c='red')
-	plt.show() 
 
