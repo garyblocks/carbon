@@ -5,50 +5,93 @@ from numpy import *
 
 class build(object):
 	def __init__(self):
-		self.probClass = {}			# probabilities for each class
-		self.probCond = {}			# conditional probabilities
-		self.probDef = -10.0 		# default log probability for nonexist value
 		self.label = []				# feature labels
 		self.cls = set()			# class labels
-		self.mainclass = ''			# mainclass of naive bayes
+		self.tree = {}				# binary tree
+	
+	#dataSet, feature to split on, value for the feature
+	def binSplitDataSet(self,dataSet, feature, value):
+		mat0 = dataSet[nonzero(dataSet[:,feature] > value)[0],:]
+		mat1 = dataSet[nonzero(dataSet[:,feature] <= value)[0],:]
+		return mat0,mat1
+
+	#Leaf-generation function for model trees
+	def linearSolve(self,dataSet):
+		# Format data in X and Y
+		m,n = shape(dataSet)
+		X = mat(ones((m,n))); Y = mat(ones((m,1)))
+		X[:,1:n] = dataSet[:,0:n-1]; Y = dataSet[:, -1]
+		xTx = X.T*X
+		if linalg.det(xTx) == 0.0:
+			raise NameError('This matrix is singular, cannot do inverse, \n\
+					try increasing the second value of ops')
+		ws = xTx.I * (X.T * Y)
+		return ws,X,Y
+	
+	def modelLeaf(self,dataSet):
+		ws,X,Y = self.linearSolve(dataSet)
+		return ws
+
+	def modelErr(self, dataSet):
+		ws,X,Y = self.linearSolve(dataSet)
+		yHat = X * ws
+		return sum(power(Y-yHat,2))
+
+	# generate a model for a leaf node return mean value of target value
+	def regLeaf(self, dataSet):
+		return mean(dataSet[:,-1])
+	
+	# returns the squared error of the target variables
+	def regErr(self, dataSet):
+		return var(dataSet[:,-1])*shape(dataSet)[0]
+
+	def createTree(self, dataSet, leafType=regLeaf, errType=regErr, ops=(1,4)):
+		feat, val = self.chooseBestSplit(dataSet, leafType, errType, ops)
+		# Return leaf value if stopping condition met
+		if feat == None: return val
+		retTree = {}
+		retTree['spInd'] = feat
+		retTree['spVal'] = val
+		lSet, rSet = binSplitDataSet(dataSet, feat, val)
+		retTree['left'] = self.createTree(lSet, leafType, errType, ops)
+		retTree['right'] = self.createTree(rSet, leafType, errType, ops)
+		return retTree
+
+	# Regression tree split function
+	# find the best way to do a binary split
+	def chooseBestSplit(self, dataSet, leafType=regLeaf,errType=regErr,ops=(1,4)):
+		# tolerance on error reduction and minimum data instances to include
+		tolS = ops[0]; tolN = ops[1]
+		# Exit if all values are equal
+		if len(set(dataSet[:,-1].T.tolist()[0])) == 1:
+			return None, leafType(dataSet)
+		m,n = shape(dataSet)
+		S = self.errType(dataSet)	# old error
+		bestS = inf; bestIndex = 0; bestValue = 0
+		# all possible splits
+		for featIndex in range(n-1):
+			for splitVal in set(dataSet[:,featIndex].T.tolist()[0]):
+				mat0, mat1 = self.binSplitDataSet(dataSet, featIndex, splitVal)
+				if (shape(mat0)[0]<tolN) or (shape(mat1)[0]<tolN): continue
+				newS = errType(mat0) + errType(mat1)
+				if newS < bestS:
+					bestIndex = featIndex
+					bestValue = splitVal
+					bestS = newS
+		# Exit if low error reduction
+		if (S - bestS) < tolS:
+			return None, self.leafType(dataSet)
+		mat0,mat1 = self.binSplitDataSet(dataSet, bestIndex, bestValue)
+		# Exit if split creates small dataset
+		if (shape(mat0)[0] < tolN) or (shape(mat1)[0] < tolN):
+			return None, leafType(dataSet)
+		return bestIndex, bestValue
 	
 	# train the classifier
 	def train(self,trainSet):
-		m,n = trainSet.dim()
-		self.cls = set(trainSet.y)
-		# default mainclass is the first class appeared
-		self.mainclass = trainSet.y[0]	
-		probClass = {}		# probability of each class
-		for i in self.cls:
-			probClass[i] = trainSet.y.count(i)/float(m)
-		self.probClass = probClass
-		probCond = {}	# conditional probabilities of each class
-		# count the conditional occurance
-		for i in range(m):
-			c = trainSet.y[i]
-			if c in probCond:
-				for j in range(n):
-					feat = probCond[c][j]	# a dictionary for each feature
-					value = trainSet.x[i][j]
-					if value in feat:
-						feat[value] += 1
-					else:
-						feat[value] = 1
-			else:
-				# create a list of dictionary
-				probCond[c] = [{} for _ in range(n)]	
-				for j in range(n):
-					probCond[c][j][trainSet.x[i][j]] = 1
-		# calc the probabilities
-		for cls in probCond:
-			cnt = trainSet.y.count(cls)
-			for a in range(n):
-				feat = probCond[cls][a]
-				# save the log value
-				for value in feat:
-					feat[value] = log(feat[value]/float(cnt))	
-		self.probCond = probCond
-		self.label = trainSet.label
+		# Combine x and y in trainSet
+		dataSet = c_[trainSet.x, trainSet.y]
+		self.tree = self.createTree(dataSet, leafType=self.regLeaf, errType=self.regErr, ops=(1,4))
 	
 	#Plot two features with class label
 	def view(self,featName):
@@ -118,84 +161,6 @@ def loadDataSet(fileName):
 		fltLine = list(map(float,curLine))
 		dataMat.append(fltLine)
 	return dataMat
-
-#dataSet, feature to split on, value for the feature
-def binSplitDataSet(dataSet, feature, value):
-	mat0 = dataSet[nonzero(dataSet[:,feature] > value)[0],:]
-	mat1 = dataSet[nonzero(dataSet[:,feature] <= value)[0],:]
-	return mat0,mat1
-
-#Leaf-generation function for model trees
-def linearSolve(dataSet):
-	# Format data in X and Y
-	m,n = shape(dataSet)
-	X = mat(ones((m,n))); Y = mat(ones((m,1)))
-	X[:,1:n] = dataSet[:,0:n-1]; Y = dataSet[:, -1]
-	xTx = X.T*X
-	if linalg.det(xTx) == 0.0:
-		raise NameError('This matrix is singular, cannot do inverse, \n\
-				try increasing the second value of ops')
-	ws = xTx.I * (X.T * Y)
-	return ws,X,Y
-
-def modelLeaf(dataSet):
-	ws,X,Y = linearSolve(dataSet)
-	return ws
-
-def modelErr(dataSet):
-	ws,X,Y = linearSolve(dataSet)
-	yHat = X * ws
-	return sum(power(Y-yHat,2))
-
-# generate a model for a leaf node return mean value of target value
-def regLeaf(dataSet):
-	return mean(dataSet[:,-1])
-
-# returns the squared error of the target variables
-def regErr(dataSet):
-	return var(dataSet[:,-1])*shape(dataSet)[0]
-
-def createTree(dataSet, leafType=regLeaf, errType=regErr, ops=(1,4)):
-	feat, val = chooseBestSplit(dataSet, leafType, errType, ops)
-	# Return leaf value if stopping condition met
-	if feat == None: return val
-	retTree = {}
-	retTree['spInd'] = feat
-	retTree['spVal'] = val
-	lSet, rSet = binSplitDataSet(dataSet, feat, val)
-	retTree['left'] = createTree(lSet, leafType, errType, ops)
-	retTree['right'] = createTree(rSet, leafType, errType, ops)
-	return retTree
-
-# Regression tree split function
-# find the best way to do a binary split
-def chooseBestSplit(dataSet, leafType=regLeaf,errType=regErr,ops=(1,4)):
-	# tolerance on error reduction and minimum data instances to include
-	tolS = ops[0]; tolN = ops[1]
-	# Exit if all values are equal
-	if len(set(dataSet[:,-1].T.tolist()[0])) == 1:
-		return None, leafType(dataSet)
-	m,n = shape(dataSet)
-	S = errType(dataSet)	# old error
-	bestS = inf; bestIndex = 0; bestValue = 0
-	# all possible splits
-	for featIndex in range(n-1):
-		for splitVal in set(dataSet[:,featIndex].T.tolist()[0]):
-			mat0, mat1 = binSplitDataSet(dataSet, featIndex, splitVal)
-			if (shape(mat0)[0]<tolN) or (shape(mat1)[0]<tolN): continue
-			newS = errType(mat0) + errType(mat1)
-			if newS < bestS:
-				bestIndex = featIndex
-				bestValue = splitVal
-				bestS = newS
-	# Exit if low error reduction
-	if (S - bestS) < tolS:
-		return None, leafType(dataSet)
-	mat0,mat1 = binSplitDataSet(dataSet, bestIndex, bestValue)
-	# Exit if split creates small dataset
-	if (shape(mat0)[0] < tolN) or (shape(mat1)[0] < tolN):
-		return None, leafType(dataSet)
-	return bestIndex, bestValue
 
 # Regression tree-pruning functions
 def isTree(obj):
