@@ -8,9 +8,12 @@ class build(object):
 		self.label = []				# feature labels
 		self.cls = set()			# class labels
 		self.tree = {}				# binary tree
+		self.tolS = 1				# tolerance on error reduction
+		self.tolN = 4				# minimum data instances to include
+		self.model = False			# if we are using model tree
 	
 	#dataSet, feature to split on, value for the feature
-	def binSplitDataSet(self,dataSet, feature, value):
+	def binSplitDataSet(self, dataSet, feature, value):
 		mat0 = dataSet[nonzero(dataSet[:,feature] > value)[0],:]
 		mat1 = dataSet[nonzero(dataSet[:,feature] <= value)[0],:]
 		return mat0,mat1
@@ -28,14 +31,25 @@ class build(object):
 		ws = xTx.I * (X.T * Y)
 		return ws,X,Y
 	
+	# leaf function for model tree
 	def modelLeaf(self,dataSet):
 		ws,X,Y = self.linearSolve(dataSet)
 		return ws
-
+	# error function for model tree
 	def modelErr(self, dataSet):
 		ws,X,Y = self.linearSolve(dataSet)
 		yHat = X * ws
 		return sum(power(Y-yHat,2))
+	
+	# Code to create a forecast with tree-based regression
+	def regTreeEval(self, model, inDat):
+		return float(model)
+
+	def modelTreeEval(self, model, inDat):
+		n = shape(inDat)[1]
+		X = mat(ones((1,n+1)))
+		X[:,1:n+1] = inDat
+		return float(X*model)
 
 	# generate a model for a leaf node return mean value of target value
 	def regLeaf(self, dataSet):
@@ -44,56 +58,98 @@ class build(object):
 	# returns the squared error of the target variables
 	def regErr(self, dataSet):
 		return var(dataSet[:,-1])*shape(dataSet)[0]
-
-	def createTree(self, dataSet, leafType=regLeaf, errType=regErr, ops=(1,4)):
-		feat, val = self.chooseBestSplit(dataSet, leafType, errType, ops)
+	
+	# function to create tree
+	def createTree(self, dataSet, leafType, errType):
+		feat, val = self.chooseBestSplit(dataSet, leafType, errType)
 		# Return leaf value if stopping condition met
 		if feat == None: return val
 		retTree = {}
 		retTree['spInd'] = feat
 		retTree['spVal'] = val
 		lSet, rSet = binSplitDataSet(dataSet, feat, val)
-		retTree['left'] = self.createTree(lSet, leafType, errType, ops)
-		retTree['right'] = self.createTree(rSet, leafType, errType, ops)
+		retTree['left'] = self.createTree(lSet, leafType, errType)
+		retTree['right'] = self.createTree(rSet, leafType, errType)
 		return retTree
 
 	# Regression tree split function
 	# find the best way to do a binary split
-	def chooseBestSplit(self, dataSet, leafType=regLeaf,errType=regErr,ops=(1,4)):
-		# tolerance on error reduction and minimum data instances to include
-		tolS = ops[0]; tolN = ops[1]
+	def chooseBestSplit(self, dataSet, leafType, errType):
 		# Exit if all values are equal
-		if len(set(dataSet[:,-1].T.tolist()[0])) == 1:
+		if len(set(dataSet[:,-1])) == 1:
 			return None, leafType(dataSet)
 		m,n = shape(dataSet)
-		S = self.errType(dataSet)	# old error
+		S = errType(dataSet)	# old error
 		bestS = inf; bestIndex = 0; bestValue = 0
 		# all possible splits
 		for featIndex in range(n-1):
-			for splitVal in set(dataSet[:,featIndex].T.tolist()[0]):
+			for splitVal in set(dataSet[:,featIndex]):
 				mat0, mat1 = self.binSplitDataSet(dataSet, featIndex, splitVal)
-				if (shape(mat0)[0]<tolN) or (shape(mat1)[0]<tolN): continue
+				if (shape(mat0)[0]<self.tolN) or (shape(mat1)[0]<self.tolN): continue
 				newS = errType(mat0) + errType(mat1)
 				if newS < bestS:
 					bestIndex = featIndex
 					bestValue = splitVal
 					bestS = newS
 		# Exit if low error reduction
-		if (S - bestS) < tolS:
-			return None, self.leafType(dataSet)
+		if (S - bestS) < self.tolS:
+			return None, leafType(dataSet)
 		mat0,mat1 = self.binSplitDataSet(dataSet, bestIndex, bestValue)
 		# Exit if split creates small dataset
-		if (shape(mat0)[0] < tolN) or (shape(mat1)[0] < tolN):
+		if (shape(mat0)[0] < self.tolN) or (shape(mat1)[0] < self.tolN):
 			return None, leafType(dataSet)
 		return bestIndex, bestValue
 	
-	# train the classifier
-	def train(self,trainSet):
-		# Combine x and y in trainSet
-		dataSet = c_[trainSet.x, trainSet.y]
-		self.tree = self.createTree(dataSet, leafType=self.regLeaf, errType=self.regErr, ops=(1,4))
+	# Regression tree-pruning functions
+	# check if a node is tree
+	def isTree(self,obj):
+		return (type(obj).__name__=='dict')
+
+	# recursively get the mean value of a tree node
+	def getMean(self, tree):
+		if isTree(tree['right']): tree['right'] = self.getMean(tree['right'])
+		if isTree(tree['left']): tree['left'] = self.getMean(tree['left'])
+		return (tree['left']+tree['right'])/2.0
 	
-	#Plot two features with class label
+	# prune the treee
+	def prune(self, tree, testData):
+		# Collapse tree if no test data
+		if shape(testData)[0] == 0: return self.getMean(tree)
+		# if right or left is tree, prune it
+		if (self.isTree(tree['right']) or self.isTree(tree['left'])):
+			lSet,rSet = self.binSplitDataSet(testData, tree['spInd'], tree['spVal'])
+		if self.isTree(tree['left']): tree['left'] = self.prune(tree['left'],lSet)
+		if self.isTree(tree['right']): tree['right'] = self.prune(tree['right'], rSet)
+		# after prune, check if left or right are not trees, if so, merge them
+		if not self.isTree(tree['left']) and not self.isTree(tree['right']):
+			lSet, rSet = self.binSplitDataSet(testData, tree['spInd'], tree['spVal'])
+			errorNoMerge = sum(power(lSet[:,-1] - tree['left'],2)) +\
+					sum(power(rSet[:,-1] - tree['right'],2))
+			treeMean = (tree['left']+tree['right'])/2.0
+			errorMerge = sum(power(testData[:,-1] - treeMean,2))
+			# if merge can reduce error, merge
+			if errorMerge < errorNoMerge:
+				print("merging")
+				return treeMean
+			else: return tree
+		else: return tree
+	
+	# train the classifier
+	def train(self,trainSet,tolS=1,tolN=4,model=False):
+		self.label = trainSet.label
+		self.cls = set(trainSet.y)
+		# set tolerance
+		self.tolS,self.tolN = tolS,tolN
+		# Combine x and y in trainSet
+		dataSet = c_[trainSet.x, trainSet.y].astype(float)
+		# choose model
+		if model:
+			self.tree = self.createTree(dataSet, leafType=self.modelLeaf, errType=self.modelErr)
+		else:
+			self.tree = self.createTree(dataSet, leafType=self.regLeaf, errType=self.regErr)
+		self.tree = self.prune(self.tree,dataSet)
+	
+	# Plot two features with class label
 	def view(self,featName):
 		from supervised import plotNB
 		i = self.label.index(featName)		#index of the feature
@@ -102,8 +158,8 @@ class build(object):
 			dict[c] = self.probCond[c][i]	#get the feature values
 		plotNB.hist(dict,featName)
 		
-	#Naive Bayes classify function
-	#input: a vector to classify, 3 probabilities
+	# CART classify function
+	# input: a vector to classify, 3 probabilities
 	def classify(self, inX):
 		maxProb,res = -inf,['',0]
 		#calc p(class)*p(value|class) for each class
@@ -150,48 +206,6 @@ def load(modelName):
 	import pickle
 	fr = open('models/'+modelName+'.nb','rb')
 	return pickle.load(fr)
-	
-# CART tree-building code
-def loadDataSet(fileName):
-	dataMat = []
-	fr = open(fileName)
-	for line in fr.readlines():
-		curLine = line.strip().split('\t')
-		# Map everything to float()
-		fltLine = list(map(float,curLine))
-		dataMat.append(fltLine)
-	return dataMat
-
-# Regression tree-pruning functions
-def isTree(obj):
-	return (type(obj).__name__=='dict')
-
-def getMean(tree):
-	if isTree(tree['right']): tree['right'] = getMean(tree['right'])
-	if isTree(tree['left']): tree['left'] = getMean(tree['left'])
-	return (tree['left']+tree['right'])/2.0
-
-def prune(tree, testData):
-	# Collapse tree if no test data
-	if shape(testData)[0] == 0: return getMean(tree)
-	# if right or left is tree, prune it
-	if (isTree(tree['right']) or isTree(tree['left'])):
-		lSet,rSet = binSplitDataSet(testData, tree['spInd'], tree['spVal'])
-	if isTree(tree['left']): tree['left'] = prune(tree['left'],lSet)
-	if isTree(tree['right']): tree['right'] = prune(tree['right'], rSet)
-	# after prune, check if left or right are not trees, if so, merge them
-	if not isTree(tree['left']) and not isTree(tree['right']):
-		lSet, rSet = binSplitDataSet(testData, tree['spInd'], tree['spVal'])
-		errorNoMerge = sum(power(lSet[:,-1] - tree['left'],2)) +\
-				sum(power(rSet[:,-1] - tree['right'],2))
-		treeMean = (tree['left']+tree['right'])/2.0
-		errorMerge = sum(power(testData[:,-1] - treeMean,2))
-		# if merge can reduce error, merge
-		if errorMerge < errorNoMerge:
-			print("merging")
-			return treeMean
-		else: return tree
-	else: return tree
 
 class treeNode():
 	def __init__(self, feat, val, right, left):
@@ -199,16 +213,6 @@ class treeNode():
 		valueOfSplit = val
 		rightBranch = right
 		leftBranch = left
-
-# Code to create a forecast with tree-based regression
-def regTreeEval(model, inDat):
-	return float(model)
-
-def modelTreeEval(model, inDat):
-	n = shape(inDat)[1]
-	X = mat(ones((1,n+1)))
-	X[:,1:n+1] = inDat
-	return float(X*model)
 
 # gives one forecast for one data point and a given tree
 def treeForeCast(tree, inData, modelEval=regTreeEval):
