@@ -28,7 +28,7 @@ class build(object):
 		if linalg.det(xTx) == 0.0:
 			raise NameError('This matrix is singular, cannot do inverse, \n\
 					try increasing the second value of ops')
-		ws = xTx.I * (X.T * Y)
+		ws = xTx.I * (X.T * mat(Y).T)
 		return ws,X,Y
 	
 	# leaf function for model tree
@@ -44,7 +44,8 @@ class build(object):
 	# Code to create a forecast with tree-based regression
 	def regTreeEval(self, model, inDat):
 		return float(model)
-
+	
+	# Code to create a forecast with model tree regression
 	def modelTreeEval(self, model, inDat):
 		n = shape(inDat)[1]
 		X = mat(ones((1,n+1)))
@@ -67,7 +68,7 @@ class build(object):
 		retTree = {}
 		retTree['spInd'] = feat
 		retTree['spVal'] = val
-		lSet, rSet = binSplitDataSet(dataSet, feat, val)
+		lSet, rSet = self.binSplitDataSet(dataSet, feat, val)
 		retTree['left'] = self.createTree(lSet, leafType, errType)
 		retTree['right'] = self.createTree(rSet, leafType, errType)
 		return retTree
@@ -143,11 +144,12 @@ class build(object):
 		# Combine x and y in trainSet
 		dataSet = c_[trainSet.x, trainSet.y].astype(float)
 		# choose model
+		self.model = model
 		if model:
 			self.tree = self.createTree(dataSet, leafType=self.modelLeaf, errType=self.modelErr)
 		else:
 			self.tree = self.createTree(dataSet, leafType=self.regLeaf, errType=self.regErr)
-		self.tree = self.prune(self.tree,dataSet)
+			self.tree = self.prune(self.tree,dataSet)
 	
 	# Plot two features with class label
 	def view(self,featName):
@@ -157,28 +159,38 @@ class build(object):
 		for c in self.cls:
 			dict[c] = self.probCond[c][i]	#get the feature values
 		plotNB.hist(dict,featName)
+	
+	# predict a new point
+	def treeForeCast(self, tree, inData, modelEval):
+		# leaf node
+		if not self.isTree(tree): return modelEval(tree, inData)
+		# left tree
+		if inData[tree['spInd']] > tree['spVal']:
+			if self.isTree(tree['left']):
+				return self.treeForeCast(tree['left'], inData, modelEval)
+			else:
+				return modelEval(tree['left'],inData)
+		# right tree
+		else:
+			if self.isTree(tree['right']):
+				return self.treeForeCast(tree['right'],inData, modelEval)
+			else:
+				return modelEval(tree['right'], inData)
 		
 	# CART classify function
-	# input: a vector to classify, 3 probabilities
+	# input: a vector to classify
 	def classify(self, inX):
-		maxProb,res = -inf,['',0]
-		#calc p(class)*p(value|class) for each class
-		for c in self.cls:
-			tmp = log(self.probClass[c])
-			for i in range(len(inX)):
-				feat = self.probCond[c][i]
-				if inX[i] in feat:		
-					tmp += feat[inX[i]]
-				else:
-					tmp += self.probDef
-			# return the probability of mainclass
-			if c==self.mainclass:
-				res[1] = tmp
-			#save the biggest prob
-			if tmp > maxProb:	
-				maxProb = tmp
-				res[0] = c[:]
-		return res
+		if self.model:
+			yHat = self.treeForeCast(self.tree, inX, self.modelTreeEval)
+		else:
+			yHat = self.treeForeCast(self.tree, inX, self.regTreeEval)
+		# find the closest class
+		cls,err = '',inf
+		for i in self.cls:
+			if abs(float(i)-yHat) < err:
+				err = abs(float(i)-yHat)
+				cls = i
+		return cls,yHat
 		
 	#test on the test dataset
 	def test(self,testSet):
@@ -197,14 +209,14 @@ class build(object):
 	#Save the model
 	def save(self,modelName):
 		import pickle
-		fw = open('models/'+modelName+'.nb','wb')
+		fw = open('models/'+modelName+'.cart','wb')
 		pickle.dump(self,fw)
 		fw.close()
 
 #Grab the model
 def load(modelName):
 	import pickle
-	fr = open('models/'+modelName+'.nb','rb')
+	fr = open('models/'+modelName+'.cart','rb')
 	return pickle.load(fr)
 
 class treeNode():
@@ -214,6 +226,7 @@ class treeNode():
 		rightBranch = right
 		leftBranch = left
 
+'''
 # gives one forecast for one data point and a given tree
 def treeForeCast(tree, inData, modelEval=regTreeEval):
 	# leaf node
@@ -239,3 +252,4 @@ def createForeCast(tree, testData, modelEval=regTreeEval):
 		yHat[i,0] = treeForeCast(tree, mat(testData[i]), modelEval)
 	#corrcoef(yHat, mat(testData)[:,1],rowvar=0)[0,1]
 	return yHat
+'''
