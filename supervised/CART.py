@@ -152,13 +152,9 @@ class build(object):
 			self.tree = self.prune(self.tree,dataSet)
 	
 	# Plot two features with class label
-	def view(self,featName):
-		from supervised import plotNB
-		i = self.label.index(featName)		#index of the feature
-		dict = {} 
-		for c in self.cls:
-			dict[c] = self.probCond[c][i]	#get the feature values
-		plotNB.hist(dict,featName)
+	def view(self):
+		from supervised import plotCART
+		plotCART.createPlot(self.tree, self.label)
 	
 	# predict a new point
 	def treeForeCast(self, tree, inData, modelEval):
