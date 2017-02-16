@@ -100,8 +100,28 @@ class build(object):
 #Plot clusters
 def view(dataSet,centers,clusters):
 	fig = plt.figure()
-	ax = plt.subplot(111)
-	ax.plot([i for i in range(len(dataSet.label))],centers.tolist()[0])
+	k = len(centers)
+	# find number of subplots per row
+	sqrtk = int(k**0.5)+1
+	# plot for all clusters
+	for j in range(k):
+		# choose subplot
+		ax = plt.subplot(sqrtk,sqrtk,j+1)
+		# custom x ticks
+		x = [i for i in range(len(dataSet.label))]
+		plt.xticks(x, dataSet.label, fontsize = 5)
+		# rotate xticks
+		for label in ax.get_xmajorticklabels():
+			label.set_rotation(30)
+			label.set_horizontalalignment("right")
+		# Plot first center
+		ax.plot(x,centers.tolist()[j],color='red')
+		# plot data points in a cluster
+		for i in range(dataSet.dim()[0]):
+			if clusters[i,0] == j:
+				ax.plot(x,dataSet.x[i],color='blue',alpha=0.05)
+		# set ylabel and title
+		plt.title('k = '+str(j+1))
 	plt.show()
 
 
