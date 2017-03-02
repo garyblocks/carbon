@@ -5,7 +5,8 @@ from numpy import *
 import matplotlib.pyplot as plt
 
 class build(object):
-	def __init__(self, dist='euclidean', method='KMeans'):
+	def __init__(self, k=5,dist='euclidean', method='ward'):
+		self.k = k					# number of clusters
 		self.dist = dist			# distance function
 		self.method = 'ward'		# method: KMeans/biKMeans
 	
@@ -14,40 +15,36 @@ class build(object):
 		return sqrt(sum(power(vecA - vecB, 2)))
 	
 	# Ward's clustering algorithm
-	def Ward(self, dataSet):
-		import copy
+	def Ward(self, dataSet, distMeas=distEclud):
 		m = shape(dataSet)[0]
-		# m merges
-		# one addition col to store the errors
-		clusterAssment = mat(zeros((m,m+1)))
-		# store the orders of clusters
-		orders = [[i] for i in range(m)]
-		centroids = copy.deepcopy(dataSet)
-		# loop over m merges
-		for i in range(m-1):
-			a,b,m = 0,1
-			for i in range(m):
-				minDist = inf;	minIndex = -1
-				# Find the closest centroid
-				for j in range(self.k):
-					distJI = distMeas(centroids[j,:], dataSet[i,:])
+		# clusters
+		clusters = [[i] for i in range(m)]
+		centroids = mat(dataSet)
+		for i in range(m-self.k):
+			print(i)
+			minDist = inf
+			a,b = -1,-1
+			# Find the closest centroids
+			for j in range(m-i-1):
+				for k in range(j+1,m-i):
+					distJI = self.distEclud(centroids[j], centroids[k])
 					if distJI < minDist:
-						minDist = distJI; minIndex = j
-				if clusterAssment[i,0] != minIndex: clusterChanged = True
-				clusterAssment[i,:] = minIndex, minDist**2
-			print(centroids)
-			# Update centroid location
-			for cent in range(self.k):
-				ptsInClust = dataSet[nonzero(clusterAssment[:,0].A==cent)[0]]
-				centroids[cent,:] = mean(ptsInClust, axis = 0)
-		return centroids, clusterAssment
+						minDist = distJI
+						a,b = j,k
+			# size of two clusters
+			n1,n2 = len(clusters[j]),len(clusters[k])
+			# combine 2 clusters
+			tmp = clusters.pop(k)
+			clusters[j].extend(tmp)
+			# Update new centroid
+			centroids[j] = (centroids[j,:]*n1+centroids[k,:]*n2)/float(n1+n2)
+			centroids = delete(centroids,k,0)
+		return centroids, clusters
 	
 	# clustering
 	def cluster(self, dataSet):
 		if self.method == 'ward':
-			return self.KMeans(dataSet, distMeas=self.distEclud, createCent=self.randCent)
-		elif self.method == 'biKMeans':
-			return self.biKMeans(dataSet, distMeas=self.distEclud)
+			return self.Ward(dataSet, distMeas=self.distEclud)
 		else:
 			print('Method not recognized')
 	
