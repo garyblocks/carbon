@@ -8,11 +8,28 @@ class build(object):
 	def __init__(self, k=5,dist='euclidean', method='ward'):
 		self.k = k					# number of clusters
 		self.dist = dist			# distance function
-		self.method = 'ward'		# method: KMeans/biKMeans
+		self.method = 'ward'		# method: ward,
 	
 	# euclidean distance
-	def distEclud(self,vecA,vecB):
-		return sqrt(sum(power(vecA - vecB, 2)))
+	# The equations is (A-B)^2 = AA-2*AB+BB 
+	# return distance matrix
+	def distEclud(self,X,Y):
+		#dimension of return matrix
+		r,c = shape(X)[0],shape(Y)[0]
+		#Get the diagonal
+		X2 = X*transpose(X)
+		diagX = X2.diagonal()
+		#AA
+		AA = repeat(diagX,c,axis=0)
+		AA = transpose(AA)
+		#BB
+		Y2 = Y*transpose(Y)
+		diagY = Y2.diagonal()
+		BB = repeat(diagY,r,axis=0)
+		#2*AB
+		AB = X*transpose(Y)
+		result = sqrt(AA-2*AB+BB)
+		return result
 	
 	# Ward's clustering algorithm
 	def Ward(self, dataSet, distMeas=distEclud):
@@ -20,26 +37,30 @@ class build(object):
 		# clusters
 		clusters = [[i] for i in range(m)]
 		centroids = mat(dataSet)
+		# bottom up aggregation
 		for i in range(m-self.k):
-			print(i)
-			minDist = inf
-			a,b = -1,-1
+			# build distance matrix
+			distances = distMeas(centroids,centroids)
+			for j in range(len(distances)):
+				distances[j,j]=inf
 			# Find the closest centroids
-			for j in range(m-i-1):
-				for k in range(j+1,m-i):
-					distJI = self.distEclud(centroids[j], centroids[k])
-					if distJI < minDist:
-						minDist = distJI
-						a,b = j,k
+			a,b = unravel_index(distances.argmin(), distances.shape)
 			# size of two clusters
-			n1,n2 = len(clusters[j]),len(clusters[k])
+			n1,n2 = len(clusters[a]),len(clusters[b])
 			# combine 2 clusters
-			tmp = clusters.pop(k)
-			clusters[j].extend(tmp)
+			tmp = clusters[b]
+			clusters[a].extend(tmp)
+			clusters.pop(b)
+			print(i)
 			# Update new centroid
-			centroids[j] = (centroids[j,:]*n1+centroids[k,:]*n2)/float(n1+n2)
-			centroids = delete(centroids,k,0)
-		return centroids, clusters
+			centroids[a] = (centroids[a]*n1+centroids[b]*n2)/float(n1+n2)
+			centroids = delete(centroids,b,0)
+		# find cluster assignment
+		clusterAssment = zeros(m)
+		for i in range(len(clusters)):
+			for j in clusters[i]:
+				clusterAssment[j]=i
+		return centroids, clusterAssment
 	
 	# clustering
 	def cluster(self, dataSet):
@@ -69,7 +90,7 @@ def view(dataSet,centers,clusters):
 		ax.plot(x,centers.tolist()[j],color='red')
 		# plot data points in a cluster
 		for i in range(dataSet.dim()[0]):
-			if clusters[i,0] == j:
+			if clusters[i] == j:
 				ax.plot(x,dataSet.x[i],color='blue',alpha=0.05)
 		# set ylabel and title
 		plt.title('k = '+str(j+1))
