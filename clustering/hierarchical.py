@@ -28,8 +28,7 @@ class build(object):
 		BB = repeat(diagY,r,axis=0)
 		#2*AB
 		AB = X*transpose(Y)
-		result = sqrt(AA-2*AB+BB)
-		return result
+		return AA-2*AB+BB
 	
 	# Ward's clustering algorithm
 	def Ward(self, dataSet, distMeas=distEclud):
