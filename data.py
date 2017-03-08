@@ -9,6 +9,7 @@ class DataSet(object):
 		self.x = zeros((1,1))	#data
 		self.y = []				#class
 		self.type = 'numeric'	#numeric or nominal data
+		self.suprv = True		#if False, there's no y
 	
 	#Get the dimension of data
 	def dim(self):
@@ -20,11 +21,15 @@ class DataSet(object):
 	#Create a data set with a filename
 	#input filename and data type, default is numeric
 	#return DataSet object
-	def read(self,filename,type = 'numeric'):
+	def read(self,filename,type = 'numeric',suprv=True):
 		# open the file
 		with open(filename) as infile:
 			# read all lines
 			raw = infile.readlines()
+			# if there's no y
+			if not suprv:
+				for i in range(len(raw)):
+					raw[i] = raw[i].strip()+',0'
 			# get the feature names
 			featNames = raw[0].strip().split(',')
 			self.label = featNames[1:len(featNames)-1]
