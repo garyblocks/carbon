@@ -2,6 +2,8 @@
 # This file is used to read data into python and do some preliminary processing
 # 
 from numpy import *
+import random
+
 class DataSet(object):
 	def __init__(self):
 		self.label = []			#name of the features
@@ -65,6 +67,26 @@ class DataSet(object):
 				new[i][j] = str(self.x[i][j])
 		self.x = new
 		self.type = 'nominal'
+	
+	#Shuffle the data randomly
+	def shuffle(self):
+		#Combine x,y and key together
+		clst = list(zip(self.x,self.y,self.key))
+		#shuffle
+		random.shuffle(clst)
+		#reassign x,y and key
+		x,self.y,self.key = zip(*clst)
+		self.x = array(x)
+	
+	#scale the data into range (a,b)
+	def scale(self,a=0,b=1):
+		xMin = self.x.min(0)
+		xMax = self.x.max(0)
+		ranges = xMax - xMin
+		row,col = self.dim()
+		A = ones((row,col))*a
+		# x = a + (X - Xmin)*(b-a)/(Xmax - Xmin)
+		self.x = A + (self.x - tile(xMin,(row,1)))*(b-a)/tile(ranges,(row,1))
 
 #Use hold out to create train and test data
 #input DataSet object and ratio (int) of holdout
