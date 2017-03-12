@@ -8,7 +8,7 @@ class build(object):
 	def __init__(self, k=5,dist='euclidean', method='ward'):
 		self.k = k					# number of clusters
 		self.dist = dist			# distance function
-		self.method = 'ward'		# method: ward,
+		self.method = method		# method: ward, clink
 	
 	# euclidean distance
 	# The equations is (A-B)^2 = AA-2*AB+BB 
@@ -50,7 +50,7 @@ class build(object):
 			tmp = clusters[b]
 			clusters[a].extend(tmp)
 			clusters.pop(b)
-			print(i)
+			print(i,'ward')
 			# Update new centroid
 			centroids[a] = (centroids[a]*n1+centroids[b]*n2)/float(n1+n2)
 			centroids = delete(centroids,b,0)
@@ -61,10 +61,52 @@ class build(object):
 				clusterAssment[j]=i
 		return centroids, clusterAssment
 	
+	# Complete linkage clustering algorithm
+	def Clink(self, dataSet, distMeas=distEclud):
+		m,n = shape(dataSet)
+		# clusters
+		clusters = [[i] for i in range(m)]
+		cluMat = []
+		# build distance matrix
+		distances = distMeas(mat(dataSet),mat(dataSet))
+		for j in range(m):
+			distances[j,j]=inf
+			# build a list of cluster elements
+			cluMat.append(mat(dataSet[j]))
+		# bottom up aggregation
+		for i in range(m-self.k):	
+			# Find the closest clusters
+			a,b = unravel_index(distances.argmin(), distances.shape)
+			# combine 2 clusters
+			tmp = clusters[b]
+			clusters[a].extend(tmp)
+			cluMat[a] = concatenate((cluMat[a],cluMat[b]))
+			clusters.pop(b)
+			cluMat.pop(b)
+			# Update distances
+			for j in range(len(distances)):
+				distances[a,j] = max(distances[a,j],distances[b,j])
+				distances[j,a] = max(distances[j,a],distances[j,b])
+			distances = delete(distances,b,0)
+			distances = delete(distances,b,1)
+			print(i,'clink')	
+		# find cluster assignment
+		clusterAssment = zeros(m)
+		for i in range(len(clusters)):
+			for j in clusters[i]:
+				clusterAssment[j]=i
+		centroids = zeros((self.k,n))
+		# get centroids
+		for i in range(self.k):
+			centroids[i] = mean(cluMat[i],0)
+		return centroids, clusterAssment
+	
 	# clustering
 	def cluster(self, dataSet):
 		if self.method == 'ward':
 			return self.Ward(dataSet, distMeas=self.distEclud)
+		elif self.method == 'clink':
+			return self.Clink(dataSet, distMeas=self.distEclud)
 		else:
 			print('Method not recognized')
 	
