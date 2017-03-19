@@ -14,6 +14,22 @@ class build(object):
 		self.label = []					#feature names
 		self.k = 1						#num of nearest neighbors
 		self.dist = 'euclidean'			#distance function
+		self.major = ''					#major class
+	
+	# repr function to show the structure of the model
+	def __repr__(self):
+		print('self.dataSet =',self.dataSet)
+		print('self.ranges =',self.ranges)
+		print('self.minVals =',self.minVals)
+		label = []
+		for i in range(len(self.y)):
+			if i<10: label.append(str(self.y[i]))
+		print('self.y = [',', '.join(label),', ...]')
+		print('self.label =',self.label)
+		print('self.k =',self.k)
+		print('self.dist =',self.dist)
+		print('self.major =',self.major)
+		return 'kNN class'
 
 	#function to normalize the data
 	def autoNorm(self):
@@ -36,6 +52,7 @@ class build(object):
 		self.k = k
 		self.autoNorm()
 		self.dist = dist
+		self.major = trainSet.y[0]
 	
 	#Plot two features with class label
 	def view(self,feat1,feat2):
@@ -84,20 +101,24 @@ class build(object):
 			classCount[voteIlabel] = classCount.get(voteIlabel,0) + 1
 		# Sort dictionary
 		sortedClassCount = sorted(classCount.items(),key=operator.itemgetter(1),reverse=True)
-		return sortedClassCount[0][0]
+		# make sure the key is in the dictionary
+		if self.major not in classCount:
+			classCount[self.major] = 0
+		return sortedClassCount[0][0],classCount[self.major]/self.k
 
 	#test the dataset with the model 
 	def test(self,testSet):
 		m = testSet.dim()[0]
 		errorCount = 0.0
-		res = []
+		res,val = [],[]
 		#classify the data and get the error rate
 		for i in range(m):
-			classifierResult = self.classify(testSet.x[i,:])
+			classifierResult,prediction = self.classify(testSet.x[i,:])
 			res.append(classifierResult)
+			val.append(prediction)
 			if (classifierResult != testSet.y[i]): errorCount += 1.0
 		print("the total error rate is: %f" % (errorCount/float(m)))
-		return res
+		return res,val
 
 	#Save the model
 	def save(self,modelName):
